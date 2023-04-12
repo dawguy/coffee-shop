@@ -1,5 +1,5 @@
 (ns coffee-shop.core
-  (:require [clojure.core.async :refer [>! <! >!! <!! take! put! chan offer! poll!]]))
+  (:require [clojure.core.async :refer [go go-loop >! <! >!! <!! take! put! chan offer! poll! alts!]]))
 
 (def grind-time 100)
 (def brew-time 250)
@@ -16,27 +16,59 @@
 ;
 ; Extra things to consider. How would programming a worker to move the items from step to step look like?
 
-(defn create-grinder []
-  (fn [in]
-    (. Thread sleep grind-time)
-    (assoc in :state "ground")))
+(defn my-prn [i s]
+  (if (= 0 (mod i 10))
+    (println i s)))
 
-(defn create-brewer []
-  (fn [in]
+(defn create-grinder [in-c out-c n]
+  (go-loop [i 0]
+    (let [in (<! in-c)]
+      (my-prn i (str "Grinder " in))
+      (. Thread sleep grind-time)
+      (>! out-c (assoc in :state "ground"))
+      (if (= i n)
+        nil
+        (recur (inc i)))
+      )))
+
+(defn create-brewer [in-c out-c n]
+  (go-loop [i 0]
+    (let [in (<! in-c)]
+    (my-prn i (str "Brewer " in))
     (. Thread sleep brew-time)
-    (assoc in :state "fresh-coffee")))
+    (>! out-c (assoc in :state "fresh-coffee"))
+    (if (= i n)
+      nil
+      (recur (inc i)))
+  )))
+
+(defn create-table [in-c out-c n]
+  (go-loop [i 0
+            vals []]
+    (let [[v c] (alts! [in-c (clojure.core.async/timeout 2000)])]
+      (my-prn i (str "Table " i))
+      (if (= c in-c)
+        (if (= i n)
+          (>! out-c vals)
+          (recur (inc i) (conj vals v)))
+        (>! out-c vals)
+        ))))
 
 (defn run-sim [n]
-  (let [grinder (create-grinder)
-        brewer (create-brewer)
+  (let [a-c (chan)
+        b-c (chan)
+        c-c (chan)
+        d-c (chan)
+        grinder (create-grinder a-c b-c (dec n))
+        brewer (create-brewer b-c c-c (dec n))
+        table (create-table c-c d-c n)
         orders (clojure.core/take n (range))]
-    (loop [[c & rem] orders
-           coffees []]
+    (go-loop [[c & rem] orders]
       (if (nil? c)
-               coffees
-               (do
-                 (if (= 0 (mod c 10)) (prn (str "Processing: " c)))
-                 (recur rem (conj coffees (-> {:state "order-placed" :c c}
-                                              (grinder)
-                                              (brewer)))))))))
+        (println (<! d-c))
+        (do
+                 (my-prn c (str "Processing: " c))
+                 (>! a-c {:state "order-placed" :c c})
+                 (recur rem))))))
+
 (run-sim 50)
