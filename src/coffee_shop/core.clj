@@ -5,18 +5,22 @@
 (def grind-time 400)
 (def brew-time 1250)
 (def time-variance 100)
-(def table-size 500)
+(def table-size 2)
 (def timeout-length 10000)
-(def num-grinders 2)
-(def num-brewers 2)
-(def num-workers 1)
-(def coffees-to-make 10)
+(def num-grinders 4)
+(def num-brewers 4)
+(def num-workers 2)
+(def coffees-to-make 50)
 (def debug true)
 
 (defn my-prn [i s]
   (if (= 0 (mod i 5))
     (println i s))
 )
+
+(defn debug-print [s]
+  (if debug
+    (println s)))
 
 (defn create-grinder [name]
   (let [in-c (a/chan)
@@ -31,7 +35,7 @@
                   (a/>! out-c (assoc v :state "ground"))
                   (recur (inc i)))
                 (do
-                  (println (str "Closing grinder: " name))
+                  (debug-print (str "Closing grinder: " name))
                   (a/close! in-c)
                   (a/close! out-c))))))
     [in-c out-c]))
@@ -49,7 +53,7 @@
                   (a/>! out-c (assoc v :state "fresh-coffee"))
                   (recur (inc i)))
                 (do
-                  (println (str "Closing brewer: " name))
+                  (debug-print (str "Closing brewer: " name))
                   (a/close! in-c)
                   (a/close! out-c))))))
     [in-c out-c]))
@@ -76,10 +80,6 @@
           (do (println (str "Timeout hit for v to port " v))
               nil))))))
 
-(defn debug-print [s]
-  (if debug
-    (prn s)))
-
 (defn next-stage [v tables]
   (debug-print (str "next-stage" v))
   (cond
@@ -101,11 +101,11 @@
                                     (:registers-out tables))
                             {:priority true})]
       (. Thread sleep worker-time)
-      (if (next-stage v tables)
+      (if (and v (next-stage v tables))
         (do
             (recur (inc i)))
         (do
-          (println (str "Closing worker: " name))))))))
+          (debug-print (str "Closing worker: " name))))))))
 
 (defn orders-to-worker-queue [orders register-out]
   (a/go-loop [[c & rem] orders]
@@ -124,7 +124,7 @@
         brewers (mapv #(create-brewer %) (mapv #(str "BREWER-" %) (take num-brewers (range))))
         tables {:rf-grinders-table (a/chan table-size)
                 :rf-brewers-table (a/chan table-size)
-                :fresh-coffee-table (a/chan table-size)}
+                :fresh-coffee-table (a/chan coffees-to-make)}
         machine-outputs {:registers-out (a/chan table-size)                        ; used for placing orders. not implemented
                          :grinders-out (a/merge (mapv second grinders))
                          :brewers-out  (a/merge (mapv second brewers))
@@ -141,9 +141,10 @@
     (a/go-loop [coffees []]
       (if (= (count coffees) coffees-to-make)
         (prn (str "COFFEE DONE:::" coffees))
-        (let [[v port] (a/alts! [out-c (a/timeout timeout-length)])]
+        (let [[v port] (a/alts! [out-c (a/timeout (* 3 timeout-length))])]
           (if (nil? v)
             (do
+              (prn (str "COFFEE TIMEOUT:::" coffees))
               coffees)
             (recur (conj coffees v)))))))
   ,)
