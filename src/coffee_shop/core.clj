@@ -125,7 +125,7 @@
         tables {:rf-grinders-table (a/chan table-size)
                 :rf-brewers-table (a/chan table-size)
                 :fresh-coffee-table (a/chan table-size)}
-        machine-outputs {:registers-out (a/chan)                        ; used for placing orders. not implemented
+        machine-outputs {:registers-out (a/chan table-size)                        ; used for placing orders. not implemented
                          :grinders-out (a/merge (mapv second grinders))
                          :brewers-out  (a/merge (mapv second brewers))
                          :grinders-in (mapv first grinders)
