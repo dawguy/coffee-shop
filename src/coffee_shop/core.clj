@@ -11,10 +11,11 @@
 (def num-brewers 2)
 (def num-workers 1)
 (def coffees-to-make 10)
+(def debug true)
 
 (defn my-prn [i s]
-  ;(if (= 0 (mod i 5))
-  ;  (println i s))
+  (if (= 0 (mod i 5))
+    (println i s))
 )
 
 (defn create-grinder [name]
@@ -75,8 +76,12 @@
           (do (println (str "Timeout hit for v to port " v))
               nil))))))
 
+(defn debug-print [s]
+  (if debug
+    (prn s)))
+
 (defn next-stage [v tables]
-  (prn (str "next-stage" v))
+  (debug-print (str "next-stage" v))
   (cond
     (= (:state v) "order-placed") (v-to-port (assoc v :state "grinders-table") (:rf-grinders-table tables))
     (= (:state v) "grinders-table") (v-to-ports v (:grinders-in tables))
@@ -84,11 +89,6 @@
     (= (:state v) "brewing-table") (v-to-ports v (:brewers-in tables))
     (= (:state v) "fresh-coffee") (v-to-port (assoc v :state "fresh-coffee") (:fresh-coffee-table tables))
     :else nil))
-
-(def a-port (atom {}))
-(def port @a-port)
-(def a-v (atom {}))
-(def v @a-v)
 
 (defn create-worker [name tables] "Workers take from machines and place on tables"
   (println (str "Starting worker " name))
@@ -100,9 +100,6 @@
                                     (:rf-grinders-table tables)
                                     (:registers-out tables))
                             {:priority true})]
-      (reset! a-port port)
-      (reset! a-v v)
-      ;(prn (str "Getting from " port " with v " v " and " (= port (:registers-out tables))))
       (. Thread sleep worker-time)
       (if (next-stage v tables)
         (do
@@ -121,19 +118,6 @@
         (let [order {:state "order-placed" :c c}]
           (a/>! register-out order)
           (recur rem))))))
-
-;(def grinders (mapv #(create-grinder %) (mapv #(str "GRINDER-" %) (take num-grinders (range)))))
-;(def brewers (mapv #(create-brewer %) (mapv #(str "BREWER-" %) (take num-brewers (range)))))
-;(def tables {:rf-grinders-table (a/chan table-size)
-;        :rf-brewers-table (a/chan table-size)
-;        :fresh-coffee-table (a/chan table-size)
-;        :registers-out (a/chan)                        ; used for placing orders. not implemented
-;       :grinders-out (a/merge (mapv second grinders))
-;       :brewers-out  (a/merge (mapv second brewers))
-;       :grinders-in (mapv first grinders)
-;       :brewers-in (mapv first brewers)})
-;
-;(create-worker "W-1" tables)
 
 (defn run-sim [n]
   (let [grinders (mapv #(create-grinder %) (mapv #(str "GRINDER-" %) (take num-grinders (range))))
