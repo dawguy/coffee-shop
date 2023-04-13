@@ -1,20 +1,21 @@
 (ns coffee-shop.core
   (:require [clojure.core.async :as a]))
 
-(def worker-time 25)
+(def worker-time 250)
 (def grind-time 400)
 (def brew-time 1250)
 (def time-variance 100)
 (def table-size 500)
-(def timeout-length 4000)
+(def timeout-length 10000)
 (def num-grinders 2)
 (def num-brewers 2)
-(def num-workers 2)
+(def num-workers 1)
 (def coffees-to-make 10)
 
 (defn my-prn [i s]
-  (if (= 0 (mod i 5))
-    (println i s)))
+  ;(if (= 0 (mod i 5))
+  ;  (println i s))
+)
 
 (defn create-grinder [name]
   (let [in-c (a/chan)
@@ -56,10 +57,10 @@
   (if (nil? v)
     nil
     (a/go
-      (let [[v port] (a/alts! (conj (mapv #(vector % v) ports)
+      (let [[pv port] (a/alts! (conj (mapv #(vector % v) ports)
                                     (a/timeout timeout-length)))]
-        (if v
-          v
+        (if pv
+          pv
           (do (println (str "Timeout hit for v to ports " v))
               nil))))))
 
@@ -67,11 +68,11 @@
   (if (nil? v)
     nil
     (a/go
-      (let [[v port] (a/alts! (vector [port v]
+      (let [[pv port] (a/alts! (vector [port v]
                                       (a/timeout timeout-length)))]
-        (if v
-          v
-          (do (println (str "Timeout hit for v to ports " v))
+        (if pv
+          pv
+          (do (println (str "Timeout hit for v to port " v))
               nil))))))
 
 (defn next-stage [v tables]
@@ -154,11 +155,11 @@
 (comment
   (let [out-c (run-sim coffees-to-make)]
     (a/go-loop [coffees []]
-      (let [[v port] (a/alts! [out-c (a/timeout (* 2 timeout-length))])]
-        (if (nil? v)
-          (do
-            (prn coffees)
-            coffees)
-          (recur (conj coffees v))))))
-
+      (if (= (count coffees) coffees-to-make)
+        (prn (str "COFFEE DONE:::" coffees))
+        (let [[v port] (a/alts! [out-c (a/timeout timeout-length)])]
+          (if (nil? v)
+            (do
+              coffees)
+            (recur (conj coffees v)))))))
   ,)
