@@ -3,12 +3,14 @@
 
 (def grind-time 100)
 (def brew-time 250)
-(def table-size 100)
+(def table-size 500)
 (def timeout-length 2000)
+(def num-grinders 5)
+(def num-brewers 10)
 (def coffees-to-make 250)
 
 (defn my-prn [i s]
-  (if (= 0 (mod i 10))
+  (if (= 0 (mod i 5))
     (println i s)))
 
 (defn create-grinder [name]
@@ -59,8 +61,8 @@
 )
 
 (defn run-sim [n]
-  (let [grinders (map #(create-grinder %) ["g-1" "g-2"])
-        brewers (map #(create-brewer %) ["b-1" "b-2"])
+  (let [grinders (map #(create-grinder %) (mapv #(str "g-" %) (take num-grinders (range))))
+        brewers (map #(create-brewer %) (mapv #(str "b-" %) (take num-brewers (range))))
         grinders-out (create-table (->v grinders 2))
         brewers-out (create-table (->v brewers 2))
         orders (clojure.core/take n (range))]
@@ -92,7 +94,7 @@
 
 (let [out-c (run-sim coffees-to-make)]
   (a/go-loop [coffees []]
-    (let [[v port] (a/alts! [out-c (a/timeout timeout-length)])]
+    (let [[v port] (a/alts! [out-c (a/timeout (* 2 timeout-length))])]
       (if (nil? v)
         (do
           (prn coffees)
